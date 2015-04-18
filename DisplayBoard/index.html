@@ -1,0 +1,459 @@
+<html>
+<html>
+<head>
+
+<script src="/static/d3.min.js"></script>
+<link href='/static/index.css' rel='stylesheet'>
+
+</head>
+<body>
+<script>
+
+
+// IP address of the DisplayServer
+ var webSock = new WebSocket("ws://192.168.1.2:8888/websocket");
+
+
+var map = {};
+map.height = 768;
+
+var dosCount = 0;
+
+
+var svg = d3.select("body").append("svg");
+
+svg.attr("width", map.width).attr("height", map.height).attr("class", "pcdccontainer");
+
+
+function lookupTeam(teamname) {
+	var got = d3.selectAll("rect")
+		.filter(function(d) {
+			return d.teamname === teamname;
+			});
+	return got.data()[0];
+}
+
+function lookupTeamObject(teamname) {
+	var got = d3.selectAll("foreignObject")
+		.filter(function(d) {
+			return d.teamname === teamname;
+		});
+	return got.data()[0];
+}
+
+function calcMidpoint(x1, y1, x2, y2, bend) {
+	if(y2<y1 && x2<x1)
+	{
+		var tmpy = y2;
+		var tmpx = x2;
+		x2 = x1;
+		y2 = y1;
+		x1 = tmpx;
+		y1 = tmpy;
+	}
+	else if(y2<y1) {
+		y1 = y2 + (y2=y1, 0);
+	}
+	else if(x2<x1) {
+		x1 = x2 + (x2=x1, 0);
+	}
+		
+	var radian = Math.atan(-((y2-y1)/(x2-x1)));
+	var r = Math.sqrt(x2-x1) + Math.sqrt(y2-y1);
+	var m1 = (x1+x2)/2;
+	var m2 = (y1+y2)/2;
+
+	var min = 2.5, max = 7.5;
+	//var min = 1, max = 7;
+	var arcIntensity = parseFloat((Math.random() * (max - min) + min).toFixed(2));
+        
+	if (bend === true) {
+		var a = Math.floor(m1 - r * arcIntensity * Math.sin(radian));
+		var b = Math.floor(m2 - r * arcIntensity * Math.cos(radian));
+	} else {
+		var a = Math.floor(m1 + r * arcIntensity * Math.sin(radian));
+		var b = Math.floor(m2 + r * arcIntensity * Math.cos(radian));
+	}
+
+	return {"x":a, "y":b};
+}
+
+function translateAlong(path) {
+	var l = path.getTotalLength();
+	return function(i) {
+	  return function(t) {
+	  	// Put in try/catch because sometimes floating point is stupid..
+	  	try {
+		    var p = path.getPointAtLength(t*l);
+		    return "translate(" + p.x + "," + p.y + ")";
+		} catch(err){
+			console.log("Caught exception.");
+			return "ERROR";
+		}
+	  }
+	}
+}
+
+function handleTraffic(msg) {
+	var serviceRGB = msg.servicergb;
+	var from = lookupTeam(msg.from)
+	var fromRed = false;
+	if (msg.from === "Red Team") {
+		fromRed = true;
+	}
+
+	// Always send from the center of the box, but hit the target at a random point within a boundary of 10
+	var fromMidX, fromMidY, toRandomX, toRandomY, bend; 
+	if (fromRed === true) {
+		fromMidX = 98;
+		fromMidY = 74;
+		toMidX = Math.floor(Math.random() * (120 - 10 + 1)) + 10;
+		toMidY = Math.floor(Math.random() * (120 - 10 + 1)) + 10;
+		bend = false;
+	} else {
+		fromMidX = 64;
+		fromMidY = 64;
+		toMidX = Math.floor(Math.random() * (190 - 10 + 1)) + 10;
+		toMidY = Math.floor(Math.random() * (140 - 10 + 1)) + 10;
+		bend = true;
+	}
+
+	console.log(from)
+	console.log(from.x)
+	var to = lookupTeam(msg.to)
+	console.log(to)
+	console.log(to.x)
+
+	var lineData = [{"x":from.x+fromMidX, "y":from.y+fromMidY},
+			calcMidpoint(from.x+fromMidX, from.y+fromMidY, to.x+toMidX, to.y+toMidY, bend),
+			{"x":to.x+toMidX,"y":to.y+toMidY}];
+
+	var lineFunction = d3.svg.line()
+		.interpolate("basis")
+		.x(function(d) { return d.x; })
+		.y(function(d) { return d.y; });
+
+	var lineGraph = svg.append("path")
+		.attr("d", lineFunction(lineData))
+		.attr("opacity",0.8)
+		.attr("stroke", serviceRGB)
+		.attr("stroke-width", 2)
+		.attr("fill", "none");
+
+	if (translateAlong(lineGraph.node()) === "ERROR") {
+		return;
+	}
+
+	var circleRadius = msg.size;
+
+	// Circle follows the line
+	var dot = svg.append("circle")
+			.attr("r", circleRadius)
+			.attr("fill",serviceRGB)
+			.transition()
+			  .duration(700)
+			  .ease("ease-in")
+			  .attrTween("transform", translateAlong(lineGraph.node()))
+			  .each("end", function() {
+			    d3.select(this)
+                            .transition().duration(500).attr("r", circleRadius * 2.5)
+			    .style("opacity",0).remove(); } );
+	 
+
+	var length = lineGraph.node().getTotalLength();
+	lineGraph.attr("stroke-dasharray", length + " " + length)
+		.attr("stroke-dashoffset", length)
+		.transition()
+			.duration(700)
+			.ease("ease-in")
+			.attr("stroke-dashoffset",0)
+			.each("end", function() {
+			  d3.select(this).
+			  transition().duration(100).style("opacity",0).remove();
+			});
+
+}
+
+function handlePwnage(msg) {
+	var serviceRGB = msg.servicergb;
+	var from = lookupTeam(msg.from)
+
+
+	// Always send from the center of the box, but hit the target at a random point within a boundary of 10
+	var fromMidX, fromMidY, toRandomX, toRandomY, bend; 
+		fromMidX = 98;
+		fromMidY = 74;
+		toMidX = 64;
+		toMidY = 64;
+		bend = false;
+	
+
+	console.log(from)
+	console.log(from.x)
+	var to = lookupTeam(msg.to)
+	console.log(to)
+	console.log(to.x)
+
+	
+
+	var lineData = [{"x":from.x+fromMidX, "y":from.y+fromMidY},
+			calcMidpoint(from.x+fromMidX, from.y+fromMidY, to.x+toMidX, to.y+toMidY, bend),
+			{"x":to.x+toMidX,"y":to.y+toMidY}];
+
+	var lineFunction = d3.svg.line()
+		.interpolate("basis")
+		.x(function(d) { return d.x; })
+		.y(function(d) { return d.y; });
+
+	var lineGraph = svg.append("path")
+		.attr("d", lineFunction(lineData))
+		.attr("opacity", 1)
+		.attr("stroke", serviceRGB)
+		.attr("stroke-width", 10)
+		.attr("fill", "none");
+
+	// Put in loop to keep trying, we don't want to miss these
+	if (translateAlong(lineGraph.node()) === "ERROR") {
+		// Try again
+		handlePwnage(msg);
+		return;
+	}
+	
+
+	var circleRadius = 25;
+
+	// Circle follows the line
+	var dot = svg.append("circle")
+			.attr("r", circleRadius)
+			.attr("fill",serviceRGB)
+			.transition()
+			  .duration(5000)
+			  .ease("ease-in")
+			  .attrTween("transform", translateAlong(lineGraph.node()))
+			  .each("end", function() {
+			    d3.select(this)
+                            .transition().duration(10000).attr("r", 300)
+			    .style("opacity",0).remove(); } )
+
+	 
+
+	var length = lineGraph.node().getTotalLength();
+	lineGraph.attr("stroke-dasharray", length + " " + length)
+		.attr("stroke-dashoffset", length)
+		.transition()
+			.duration(5000)
+			.ease("ease-in")
+			.attr("stroke-dashoffset",0)
+			.each("end", function() {
+			  d3.select(this).
+			  transition().duration(1000).style("opacity",0).remove();
+			});
+
+}
+
+function handleDos(msg) {
+	var serviceRGB = msg.servicergb;
+	var from = lookupTeam(msg.from)
+	var fromRed = false;
+	if (msg.from === "Red Team") {
+		fromRed = true;
+	}
+
+	// Always send from the center of the box, but hit the target at a random point within a boundary of 10
+	var fromMidX, fromMidY, toRandomX, toRandomY, bend; 
+	if (fromRed === true) {
+		fromMidX = 98;
+		fromMidY = 74;
+		toMidX = Math.floor(Math.random() * (129 - 10 + 1)) + 10;
+		toMidY = Math.floor(Math.random() * (129 - 10 + 1)) + 10;
+		bend = false;
+	} else {
+		fromMidX = 64;
+		fromMidY = 64;
+		toMidX = Math.floor(Math.random() * (190 - 10 + 1)) + 10;
+		toMidY = Math.floor(Math.random() * (140 - 10 + 1)) + 10;
+		bend = true;
+	}
+
+	console.log(from)
+	console.log(from.x)
+	var to = lookupTeam(msg.to)
+	console.log(to)
+	console.log(to.x)
+
+	var lineData = [{"x":from.x+fromMidX, "y":from.y+fromMidY},
+			calcMidpoint(from.x+fromMidX, from.y+fromMidY, to.x+toMidX, to.y+toMidY, bend),
+			{"x":to.x+toMidX,"y":to.y+toMidY}];
+
+	var lineFunction = d3.svg.line()
+		.interpolate("basis")
+		.x(function(d) { return d.x; })
+		.y(function(d) { return d.y; });
+
+	var lineGraph = svg.append("path")
+		.attr("d", lineFunction(lineData))
+		.attr("opacity",0.8)
+		.attr("stroke", serviceRGB)
+		.attr("stroke-width", 2)
+		.attr("fill", "none");
+
+	if (translateAlong(lineGraph.node()) === "ERROR") {
+		return;
+	}
+
+	var circleRadius = msg.size;
+
+	// Circle follows the line
+	var dot = svg.append("circle")
+			.attr("r", circleRadius)
+			.attr("fill",serviceRGB)
+			.transition()
+			  .duration(150)
+			  .ease("ease-in")
+			  .attrTween("transform", translateAlong(lineGraph.node()))
+			  .each("end", function() {
+			    d3.select(this)
+                            .transition().duration(1).attr("r", circleRadius)
+			    .style("opacity",0).remove(); } );
+	 
+
+	var length = lineGraph.node().getTotalLength();
+	lineGraph.attr("stroke-dasharray", length + " " + length)
+		.attr("stroke-dashoffset", length)
+		.transition()
+			.duration(150)
+			.ease("ease-in")
+			.attr("stroke-dashoffset",0)
+			.each("end", function() {
+			  d3.select(this).
+			  transition().duration(1).style("opacity",0).remove();	});
+}
+
+
+function handleTable(msg) {
+	var table = svg.selectAll("tables");
+	tableData = [msg];
+	console.log("Created table");
+
+	var redTeamWidth = 200;
+	var redTeamHeight = 150;
+	var blueTeamWidth = 130;
+	var blueTeamHeight = 130;
+	
+	// Consider making size a passable item sent by application
+	if (msg.teamname === "Red Team") {
+		var g = table.data(tableData).enter().append("g")
+						
+		rect = g.append("rect")
+				.attr("x", msg.x)
+				.attr("y", msg.y)
+				.attr("height", redTeamHeight)
+				.attr("width", redTeamWidth)
+				.attr("class", "redTeam");
+				
+		g.append("foreignObject")
+				.attr("x", msg.x+1)
+				.attr("y", msg.y+1)
+				.attr("z", 100)
+				.attr("height", redTeamHeight - 2)
+				.attr("width", redTeamWidth - 2)
+				.append("xhtml:span")
+				.html(msg.shorthand)
+				.append("xhtml:img")
+				.attr("src", "/static/skull1.svg")
+				.attr("style", "height: 60%; opacity: 0.5");
+							
+	} else if (msg.teamname === "Legend") {
+		var htmlLegendContent = "";
+		htmlLegendContent =  "<font color=\"#ff00ff\">[FTP] ";
+		htmlLegendContent += "<font color=\"#ed5259\">[SSH] ";
+		htmlLegendContent += "<font color=\"#8e7618\">[TELNET] ";
+		htmlLegendContent += "<font color=\"#f0c391\">[EMAIL] ";
+		htmlLegendContent += "<font color=\"#e5e5e5\">[WHOIS] ";
+		htmlLegendContent += "<font color=\"#b2b2b2\">[DNS] ";
+		htmlLegendContent += "<font color=\"#a8ff00\">[HTTP] ";
+		htmlLegendContent += "<font color=\"#00ff00\">[HTTPS] ";
+		htmlLegendContent += "<font color=\"#56bdd6\">[SQL] ";
+		htmlLegendContent += "<font color=\"#ffd700\">[SNMP] ";
+		htmlLegendContent += "<font color=\"#40e0d0\">[SAMBA] ";
+		htmlLegendContent += "<font color=\"#f47835\">[AUTH] ";
+		htmlLegendContent += "<font color=\"#0000ee\">[RDP] ";
+		htmlLegendContent += "<font color=\"#404041\">[ICMP] ";
+		//htmlLegendContent += "<font color=\"#000000\">[DDOS] ";
+		//htmlLegendContent += "<font color=\"#ff0000\">[PWNAGE] ";
+
+
+		var legend_height = 82;
+		var legend_width = 1014;
+		var g = table.data(tableData).enter().append("g")
+		rect = g.append("rect")
+				.attr("x", msg.x)
+				.attr("y", msg.y)
+				.attr("height", legend_height)
+				.attr("width", legend_width)
+				.attr("class", "legend");
+
+		g.append("foreignObject")
+				.attr("x", msg.x+1)
+				.attr("y", msg.y+1)
+				.attr("height", legend_height-2)
+				.attr("width", legend_width-2)
+				.append("xhtml:span")
+				.attr("width", legend_width)
+				.attr("style", "font-size: 1.9em")
+				.html(htmlLegendContent)
+		
+				
+	} else {
+		var g = table.data(tableData).enter().append("g")
+		rect = g.append("rect")
+				.attr("x", msg.x)
+				.attr("y", msg.y)
+				.attr("height", blueTeamHeight)
+				.attr("width", blueTeamWidth)
+				.attr("class", "blueTeam")
+
+		g.append("foreignObject")
+				.attr("x", msg.x+1)
+				.attr("y", msg.y+1)
+				.attr("z", 100)
+				.attr("height", blueTeamHeight - 2)
+				.attr("width", blueTeamWidth - 2)
+				.append("xhtml:span")
+				.html(msg.shorthand);
+	}
+}
+
+webSock.onmessage = function (e) {
+	// Put everything in an try/catch so we don't crash. Rather ignore a packet than crash the
+	// display during the competition.	
+	console.log("Got a websocket message...");
+	try {
+		var msg = JSON.parse(e.data);
+		console.log(msg)
+		console.log(msg.type)
+		switch(msg.type) {
+			case "Table":
+				console.log("Table");
+				handleTable(msg);
+				break;
+			case "Traffic":
+				console.log("Traffic!!");
+				handleTraffic(msg);
+				break;
+			case "Pwnage":
+				console.log("Pwnage!!")
+				handlePwnage(msg);
+				break;
+			case "Denial of Service":
+				handleDos(msg);
+				console.log("Denial of Service!!")
+				break;
+		}
+	} catch(err) {
+		console.log("Recovered from error.")
+	}
+};
+</script>
+</body>
+</html>

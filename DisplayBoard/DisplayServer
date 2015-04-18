@@ -1,0 +1,213 @@
+#!/usr/bin/env python
+
+# Imports
+import json
+import os
+import redis
+import sys
+import tornadoredis
+import tornado.httpserver
+import tornado.ioloop
+import tornado.web
+import tornado.websocket
+
+# Define table and layout sizes
+width = 1024
+height = 768
+
+
+redteam_width = 200
+redteam_height = 150
+
+blueteam_width = 130
+blueteam_height = 130
+
+
+legend_width = width - 10
+legend_height = 82
+
+
+border_buffer = 5
+
+teamAreaHeight = height - legend_height
+
+
+clients = []
+
+# a list of table coordinates from top left to bottom right...
+tables = [
+          # Red Team
+          ((width/2) - (redteam_width/2), (teamAreaHeight/2) - (redteam_height/2)),
+          # Team A
+          (0+border_buffer, 0+border_buffer),
+          # Team B
+          ((width/2) - (blueteam_width/2), 0+border_buffer),
+          # Team C
+          (width-blueteam_width-border_buffer, 0+border_buffer),
+          # Team D
+          (0+border_buffer, (teamAreaHeight/2) - (blueteam_height/2)),
+          # Team E
+          (width-blueteam_width-border_buffer, (teamAreaHeight/2)-(blueteam_height/2)),
+          # Team F
+          (0+border_buffer, teamAreaHeight-blueteam_height-border_buffer),
+          # Team G
+          ((width/2) - (blueteam_width/2), teamAreaHeight-blueteam_height-border_buffer),
+          # Team H
+          (width-blueteam_width-border_buffer, teamAreaHeight-blueteam_height-border_buffer),
+          # Legend
+          (0+border_buffer, height-legend_height)
+        ]
+
+# List of teams
+teamlist = [
+            {"teamname": "Red Team", "x":0, "y": 5, "shorthand": "Red Team", "type": "Table", "loc": 0 },
+            {"teamname": "Team A", "x": 0, "y": 200, "shorthand": "Team A", "type": "Table", "loc": 1 },
+            {"teamname": "Team B", "x": 0, "y": 250, "shorthand": "Team B", "type": "Table", "loc": 2 },
+            {"teamname": "Team C", "x": 0, "y": 300, "shorthand": "Team C", "type": "Table", "loc": 3 },
+            {"teamname": "Team D", "x": 0, "y": 300, "shorthand": "Team D", "type": "Table", "loc": 4 },
+            {"teamname": "Team E", "x": 0, "y": 300, "shorthand": "Team E", "type": "Table", "loc": 5 },
+            {"teamname": "Team F", "x": 0, "y": 300, "shorthand": "Team F", "type": "Table", "loc": 6 },
+            {"teamname": "Team G", "x": 0, "y": 250, "shorthand": "Team G", "type": "Table", "loc": 7 },
+            {"teamname": "Team H", "x": 0, "y": 200, "shorthand": "Team H", "type": "Table", "loc": 8 },
+            {"teamname": "Legend", "x": 0, "y": 5, "shorthand": "Legend", "type": "Table", "loc": 9 }
+            ]
+
+# Look up map of services and their color
+servicergb = {
+            "FTP":"#ff00ff",
+            "SSH":"#ed5259",
+            "TELNET":"#8e7618",
+            "EMAIL":"#f0c391",
+            "WHOIS":"#e5e5e5",
+            "DNS":"#b2b2b2",
+            "HTTP":"#a8ff00",
+            "HTTPS":"#00ff00",
+            "SQL":"#56bdd6",
+            "SNMP":"#ffd700",
+            "SMB":"#40e0d0",
+            "AUTH":"#f47835",
+            "RDP":"#0000ee",
+            "DENIAL OF SERVICE":"#000000",
+            "ICMP":"#404041",
+            "PWNAGE":"#ff0000",
+            "OTHER":"#404041"
+            } 
+
+
+class IndexHandler(tornado.web.RequestHandler):
+  @tornado.web.asynchronous
+  def get(request):
+    request.render("index.html")
+
+class WebSocketChatHandler(tornado.websocket.WebSocketHandler):
+  def __init__(self, *args, **kwargs):
+    super(WebSocketChatHandler, self).__init__(*args, **kwargs)
+    self.listen()
+
+  @tornado.gen.engine
+  def listen(self):
+
+    print("[*] WebSocketChatHandler opened.")
+
+    self.sent_teams = 0
+
+    try:
+       # This is the IP address of the DataServer
+       self.client = tornadoredis.Client("0.0.0.0")
+       self.client.connect()
+       yield tornado.gen.Task(self.client.subscribe, "pcdc-visuals-production")
+       self.client.listen(self.on_message)
+    except Exception as ex:
+       print("[*] Couldn't connect to Redis server!")
+       print("[*] " + str(ex))
+
+  # This function is called everytime a Redis message is received
+  def on_message(self, msg):
+      # Put everything in here in a try/except block so a crash doesn't happen
+      # if a packet not accounted for somehow gets into the system
+      try:
+         # Uncomment this line if you want to see the contents of the message
+         #print("[*] " + str(msg))
+         if self.sent_teams == 0:
+             print("[*] Initializing teams.")
+             teams = self.init_teams()
+             map(self.send_team, teams)
+             self.sent_teams = 1
+
+         if len(msg) == 0:
+            return None
+         try:
+            data = json.loads(msg.body)
+         except Exception as ex:
+            return None
+          
+
+         data = json.loads(msg.body)
+         message_type = data["type"]
+         if (data["size"] == 0):
+          size = 1
+         else:
+          size = math.log(data["size"]) * 1.5
+         from_team = data["from"]
+         to_team = data["to"]
+         src_ip = data["src_ip"]
+         dst_ip = data["dst_ip"]
+         src_port = data["src_port"]
+         dst_port = data["dst_port"]
+         protocol = data["protocol"]
+         color = servicergb[data["protocol"]]
+         msg_to_send = dict ({"type": message_type, "size": size, "from": from_team, "to": to_team, 
+                              "src_ip": src_ip, "dst_ip": dst_ip, "src_port": src_port, "dst_port": dst_port, 
+                              "protocol": protocol, "servicergb": color })
+
+         self.write_message(json.dumps(msg_to_send))
+      except Exception as ex:
+        print("[*] Recovering from error.")
+        print("[*] " + str(ex))
+
+
+  def send_team(self, team):
+    a = json.dumps(team)
+    self.write_message(json.dumps(team))
+
+  def on_close(self):
+    print("[*] Closing connection.")
+
+  def check_origin(self, origin):
+    return True
+
+  def init_teams(self):
+    for t in (teamlist):
+      t["x"] = tables[t["loc"]][0]
+      t["y"] = tables[t["loc"]][1]
+    return teamlist
+
+
+# Define the main function
+def main(argv):
+  
+  # Register handler pages
+  handlers = [
+    (r'/websocket', WebSocketChatHandler),
+    (r'/', IndexHandler),
+  ]
+  # Define static settings
+  settings = {
+    "static_path": os.path.join(os.path.dirname(__file__), "static")
+  }
+
+  # Create and start app listening on port 8888
+  app = tornado.web.Application(handlers, **settings)
+  app.listen(8888)
+  print("[*] Waiting on browser connections...")
+  tornado.ioloop.IOLoop.instance().start()
+
+# Call main function on entry
+if __name__ == "__main__":
+    # Wrap main() in keyboard interrupt
+    try:
+        main(sys.argv)
+    except KeyboardInterrupt:
+        print("\n[*] Server is quitting...")
+        sys.exit(0)
+

@@ -1,0 +1,128 @@
+@import url(https://fonts.googleapis.com/css?family=Exo+2:100,700|Merriweather+Sans:300);
+html {
+  height: 100%; }
+
+body {
+  background: black;
+  background-color: #000000;
+  /*background-image: url("binary_background4.png");*/
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: white;
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  left: 0;
+  margin: 0;
+  padding: 0; 
+}
+
+.container {
+  width: 500px;
+  margin: 0 auto;
+  padding: 0;
+  padding-bottom: 1em;
+  text-align: center; 
+}
+
+.pcdccontainer {
+  background:rgb(00,00,00);
+  background-image: url("binary_background3.jpg");
+  
+}
+
+.pcdccontainer span {
+  font-family: "Exo 2", Exo, "Helvetica Neue", Helvetica, sans-serif, Arial;
+  font-weight: 800;
+  font-size: 2.2em;
+  color: rgb(00,00,00);
+  text-align: center;
+  vertical-align: center;
+  display: block;
+  /*max-width: 198px;*/
+  /*max-height: 198px;*/
+  margin: 0 auto;
+  word-wrap: break-word;  
+} 
+
+.legendcontainer {
+  display:inline-block;
+  background:rgb(255,255,255);
+}
+
+
+.redTeam {
+  height: 100%;
+  width: 100%;
+  fill: #FF0000;
+  background-position: center;
+  position: relative;
+  background-repeat: no-repeat;
+  stroke: black;
+  stroke-width: 6;
+  stroke-linecap: round;
+ }
+
+.redTeam span {
+  max-width: 198px;
+
+}
+
+.blueTeam {
+  fill: #0000DD;
+  stroke: black;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.blueTeam span {}
+
+.legend {
+  fill: #FFFFFF;
+  stroke: black;
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.15;
+}
+
+.legend span {
+  max-width: 1142px;
+  max-height: 100px;
+}
+
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Exo 2", Exo, "Helvetica Neue", Helvetica, sans-serif, Arial;
+  font-weight: 100; }
+
+th {
+  font-family: "Exo 2", Exo, "Helvetica Neue", Helvetica, sans-serif, Arial;
+  font-weight: 700; }
+
+.banner {
+  margin-top: 32px;
+  border: 1px solid #170225;
+  width: 512px;
+  height: 512px; }
+  .banner h1 {
+    font-size: 200px;
+    margin: 0;
+    margin-top: -32px;
+    margin-bottom: 144px;
+    padding: 0; }
+  .banner h2 {
+    font-size: 36px;
+    margin: 0;
+    padding: 0; }
+  .banner h3 {
+    font-size: 18px;
+    margin: 0; }
+
+p, li, td {
+  font-family: "Merriweather Sans", "Helvetica Neue", Helvetica, sans-serif, Arial;
+  font-weight: 300; }
+
+h3 {
+  margin-top: 24px;
+  margin-bottom: 12px; }
