@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 
+"""
+AUTHOR: Sam Cappella - sjcappella@gmail.com
+"""
+
 # Imports
 import json
+import math
 import os
 import redis
 import sys
@@ -125,7 +130,7 @@ class WebSocketChatHandler(tornado.websocket.WebSocketHandler):
   def on_message(self, msg):
       # Put everything in here in a try/except block so a crash doesn't happen
       # if a packet not accounted for somehow gets into the system
-      try:
+      #try:
          # Uncomment this line if you want to see the contents of the message
          #print("[*] " + str(msg))
          if self.sent_teams == 0:
@@ -161,9 +166,9 @@ class WebSocketChatHandler(tornado.websocket.WebSocketHandler):
                               "protocol": protocol, "servicergb": color })
 
          self.write_message(json.dumps(msg_to_send))
-      except Exception as ex:
-        print("[*] Recovering from error.")
-        print("[*] " + str(ex))
+      #except Exception as ex:
+        #print("[*] Recovering from error.")
+        #print("[*] " + str(ex))
 
 
   def send_team(self, team):

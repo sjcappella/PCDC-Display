@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+"""
+AUTHOR: Sam Cappella - sjcappella@gmail.com
+"""
+
 # Imports
 import json
 import os
@@ -28,8 +32,13 @@ log_file = "./data_server.out"
 
 blueteam_monikers = ["Team A", "Team B", "Team C", "Team D", "Team E", "Team F", "Team G", "Team H"]
 
-redteam_ranges = ["10.2.13.0/16", "10.20.17.0/16"]
+blueteam_ranges = ["10.0.10.0/24", "10.0.20.0/24", "10.0.30.0/24", "10.0.40.0/24", "10.0.50.0/24", "10.0.60.0/24", "10.0.70.0/24", "10.0.80.0/24"]
+# For testing
+#blueteam_ranges = ["192.168.1.1/32", "192.168.1.5/32", "192.168.1.7/32", "192.168.1.6/32", "192.168.1.8/32", "24.214.95.0/24", "198.41.208.0/24", "63.245.215.0/24"]
 
+redteam_ranges = ["10.2.13.0/16", "10.20.17.0/16"]
+# For testing
+#redteam_ranges = ["192.168.1.2/32"]
 
 # Stats to track
 packets_sniffed = 0
@@ -205,6 +214,8 @@ def in_range(src_ip, dst_ip):
         return False
     
     # Check to see if IP addresses belong to the same Blue Team
+    # NOTE: IF you are testing this on your LAN and your 'Red Team' is in the same /24 as your 'Blue Teams', 
+    # you will not see any traffic. Comment this out if that is your case.
     if IPNetwork(src_ip + "/24") == IPNetwork(dst_ip + "/24"):
         return False
 
@@ -413,7 +424,8 @@ def connect_redis():
     return r
 
 # Function to initialize settings
-def initialize():
+def initialize(randomize):
+    # Consider starting REDIS server...get feedback.
     log("================================================", "STARTUP")
     log(strftime("%d/%m/%y" + " - " + strftime("%H:%M:%S")))
     log("Initializing...")
@@ -425,8 +437,9 @@ def initialize():
         log("Defaulting to: " + log_file)
 
     # Randomly determine the order of Blue Team monikers
-    random.shuffle(blueteam_monikers)
-    log("Team Order: " + str(blueteam_monikers))
+    if randomize == True:
+        random.shuffle(blueteam_monikers)
+        log("Team Order: " + str(blueteam_monikers))
 
 # Define the shutdown function
 def shutdown():
@@ -452,17 +465,22 @@ def main(argv):
     parser.add_option("-v", "--verbose", action="store_true", dest="verbose", help="Run server in verbose mode. Print to STDOUT. Default mode if output file is blank. Both can be turned on.\n")
     parser.add_option("-f", "--file", dest="pcap_file", help="File if reading from a PCAP file.\n")
     parser.add_option("-o", "--output", dest="output", help="File to write the logs to.\n")
-    parser.add_option("-r", "--redis-server-ip", dest="redis_ip", help="IP address of the REDIS server.\n")
+    parser.add_option("-r", "--random", action="store_true", dest="randomize", help="Randomize the Blue Team monikors so Team A on the display isn't garaunteed to be Team 1.\n")
+    parser.add_option("-s", "--redis-server-ip", dest="redis_ip", help="IP address of the REDIS server.\n")
     (options, args) = parser.parse_args()
 
     if options.output is not None:
         log_file = options.output
     # Initialize things needed by the server
-    initialize()
+    initialize(options.randomize)
 
     # Parse command line arguments
     if options.show_readme == True:
-        print("README...Doesn't exist yet.\n\n\n")
+        print("README:")
+        print("This is the data server component of a realtime network visualization built for cyber defense competitions.")
+        print("If you encounter any issues, errors, bugs, or want additional features, please contact the original auther.")
+        print("Author: Sam Cappella - sjcappella@gmail.com")
+        print("Link: https://github.com/sjcappella/PCDC-Display")
         sys.exit()
     # Connect to Redis
     if options.redis_ip == None:
